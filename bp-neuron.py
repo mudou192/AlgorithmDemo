@@ -1,35 +1,18 @@
 #coding=utf8
 '''
-Created on 2016-9-1
+Created on 2016-9-6
 
 @author: xuwei
 
-@summary: 
-'''
-'''
-参考：http://blog.jobbole.com/90184/
+@summary: BP神经网络(三层结构)
 
-偏置结点:是为了描述训练数据中没有的特征，偏置结点对于下一层的每一个结点的权重的不同而生产不同的偏置，于是可以认为偏置是每一个结点（除输入层外）的属性。
-
-BP神经网络的训练过程分两部分：
-
-    前向传输，逐层波浪式的传递输出值；
-    逆向反馈，反向逐层调整权重和偏置；
+注意：在测试遇到了一个问题，我在测试的时候，发现有组测试数据的输出一直不准；
+    输出值一个是0.53左右，一个是0.03左右，修改迭代次数也不能解决，对着书上公式看了一天，也没发现什么问题，后来才知道与测试的标签值有关。
+    如果训练样本和测试数据中有属性和结果的对应规律较其他样本的规律差别较大，就会导致这种误差（测试样本误差）
     
-前向传输（Feed-Forward前向反馈）
-    1.在训练网络之前，我们需要随机初始化权重和偏置,对每一个权重取[-1,1]的一个随机实数，每一个偏置取[0,1]的一个随机实数，之后就开始进行前向传输。
-    2.为每一个属性设置一个对应的神经元，比如说训练集有100条数据，每条数据有20个属性，那么就设置20个神经元与之对应。
-    3.对个属性加权累加，然后加上偏置，最后带入 sigmoid 函数，求得输出值
-
-逆向反馈（Backpropagation）
-    我们第一次前向反馈时，整个网络的权重和偏置都是我们随机取，因此网络的输出肯定还不能描述记录的类别，因此需要调整网络的参数，即权重值和偏置值，
-    而调整的依据就是网络的输出层的输出值与类别之间的差异，通过调整参数来缩小这个差异，这就是神经网络的优化目标。
-    
-    
-
+在人大论坛上看到句话：神经网络的训练样本质量及数量和网络结果严重影响预测结果。
 '''
-
-import math,numpy,random
+import math,numpy
 
 def sigmoid(x):
     '''
@@ -37,168 +20,141 @@ def sigmoid(x):
     '''
     return 1.0 / (1.0 + math.exp(-x))
 
+def dsigmoid(x):
+    """
+    @summary: dsigmoid 函数，f'(x) = f(x) * (1 - f(x))
+    """
+    return x * (1 - x)
+
 class Neuron(object):
-    def __init__(self,nextlayerNum = 1):
+    def __init__(self,nextlayerNum = 0):
         '''
-        @summary: 神经元模块
+        @summary:         神经单元
+        @param Weight:    权重
+        @param Bais:      偏置(误差)
+        @param OutPut/Activated: 输出/激活值(这里激活值就是输出值)
+        @param Gradient:  梯度
         '''
-        '''权重 ∈ [-1,1],为下一层的每一个节点初始化权重'''
         self.Weight = numpy.random.uniform(-1,1,nextlayerNum)
-        '''偏置 ∈  {0,1},初始化该节点的偏置
-         (有叫作误差，也有叫作阀值：但是感觉阀值这个名称已经偏离了本身的意义，偏置和误差更为合理；阈值不动或者不设置阈值，也是没有问题的，但是有了动态的阈值，那么学习得更快，效果更好) ∈ [0,1]'''
-        self.Bais = random.uniform(0,1)
-        '''输出参数 ∈ {0,1}'''
+        self.Bais = 0.0
         self.OutPut = None
-        '''激活值（暂时没有用到）'''
-        self.Activated  = None
+        self.Activated  = 0.0
+        self.Gradient = numpy.random.uniform(0.0,0.0,nextlayerNum)
         
-class NeuralNetWork(object):
-    def __init__(self,inputNum,hideNum,outputNum,hideDeep):
-        '''构建神经网络'''
-        '''
-        @param inputNum: 输入层个数
-        @param hideNum: 隐含层个数
-        @param outputNum: 输出层单元个数
-        @param hideDeep: 隐含层的层数
-        '''
-        self.inputNum = inputNum
+class NetWork(object):
+    def __init__(self,inputNum,hideNum,outputNum):
+        self.inputNum = inputNum + 1
         self.hideNum = hideNum
         self.outputNum = outputNum
-        self.hideDeep = hideDeep
         self.init_net_work()
-        
+    
     def init_net_work(self):
         '''
-        @summary: 初始化各层神经网络
+        @summary: 初始化三层网络
         '''
-        '''初始化输入层'''
-        self.InputLayer = [Neuron(self.hideNum) for i in range(self.inputNum)]
-        '''初始化隐含层(权重：最后一个是输出层的节点个数，其他是隐藏层结点个数)'''
-        self.HideLayers = []
-        for i in range(self.hideDeep):
-            if i == self.hideDeep - 1:
-                HideLayer = [Neuron(self.outputNum) for i in range(self.hideNum)]
-            else:
-                HideLayer = [Neuron(self.hideNum) for i in range(self.hideNum)]
-            self.HideLayers.append(HideLayer)
-        '''初始化输出层,输出层没有对下一层的权重，所以可以不使用权重字段'''
-        self.OutputLayer =  [Neuron() for i in range(self.outputNum)]
+        '''输入层的权重为输入层--->隐含层的权重，隐含层的权重为隐含层--->输出层的权重'''
+        self.InputLayer = [Neuron(self.hideNum) for _ in range(self.inputNum)]
+        self.HideLayer = [Neuron(self.outputNum) for _ in range(self.hideNum)]
+        self.OutputLayer = [Neuron() for _ in range(self.outputNum)]
     
     def Forward(self,inputs):
         '''
-        @summary: 前向传播
+        @summary: 前向传输
+        @输入层不进行计算
+        @隐藏层：∑Wij*Oi  Wij:输入层第i单元到隐藏层第j单元的权重；Oi：输入层第i单元的输出值
+        @输出层：∑Wjk*Oj  Wjk:隐藏层第j单元到输出层第k单元的权重；Oi：隐藏层第j单元的输出值
         '''
         '''输入层'''
+        for i in range(self.inputNum - 1):
+            self.InputLayer[i].Activated = inputs[i]
+        '''隐藏层'''    
+        for j in range(self.hideNum):
+            WeightCount = 0.0
+            for i in range(self.inputNum):
+                WeightCount += self.InputLayer[i].Activated * self.InputLayer[i].Weight[j]
+            self.HideLayer[j].Activated = sigmoid(WeightCount)
+        '''输出层'''
+        output = []
+        for k in range(self.outputNum):
+            WeightCount = 0.0
+            for j in range(self.hideNum):
+                WeightCount += self.HideLayer[j].Activated * self.HideLayer[j].Weight[k]
+            self.OutputLayer[k].Activated = sigmoid(WeightCount)
+            output.append(self.OutputLayer[k].Activated)
+            
+        return output
+        
+    def NewBack(self,targets,NowLearn = 0.5,LastLearn = 0.1):
+        '''
+        @summary: 逆向反馈
+        @隐藏层到输出层误差: Ej = Oj(1 - Oj)(Tj - Oj)
+        @输入层到隐藏层误差：Ej = Oj(1 - Oj)* ∑(Ek * Wjk)
+        @梯度：Gin = Ek * Oj    Ek是对应上一层第k个单元的误差，Oj是当前层第j个单元的输出值
+        @权重：ΔWij = λ1 * Gin + λ2 * Gil;  Wij = Wij + ΔWij    
+            :其中λ1当前学习速率，λ2上次学习速率(动量因子)，Gn当前梯度，Gl上次梯度,i当前层第i个节点，j下一层第j个节点
+            :计算完权重更新梯度
+        '''
+        
+        '''隐藏层到输出层误差'''
+        for k in range(self.outputNum):self.OutputLayer[k].Bais = 0.0
+        for k in range(self.outputNum):
+            Error = targets[k] - self.OutputLayer[k].Activated
+            self.OutputLayer[k].Bais = Error * dsigmoid(self.OutputLayer[k].Activated)
+            
+        '''更新隐藏层到输出层权重、梯度'''
+        for j in range(self.hideNum):
+            for k in range(self.outputNum):
+                nowGradient = self.OutputLayer[k].Bais * self.HideLayer[j].Activated 
+                self.HideLayer[j].Weight[k] += NowLearn * nowGradient + LastLearn * self.HideLayer[j].Gradient[k]
+                self.HideLayer[j].Gradient[k] = nowGradient
+
+        '''输入层到隐藏层误差'''
+        for j in range(self.hideNum):self.HideLayer[j].Bais = 0.0
+        for j in range(self.hideNum):
+            Error = 0.0
+            for k in range(self.outputNum):
+                Error += self.OutputLayer[k].Bais * self.HideLayer[j].Weight[k]
+            self.HideLayer[j].Bais = Error * dsigmoid(self.HideLayer[j].Activated)
+            
+        '''更新输入层到隐含层梯度和误差'''
         for i in range(self.inputNum):
-            '''输入层不进行函数处理，只接收输入（将权重修改为1，加权没有影响）'''
-            self.InputLayer[i].Weight = self.InputLayer[i].Weight / self.InputLayer[i].Weight
-            self.InputLayer[i].OutPut = inputs[i]
-            
-        '''隐藏层'''
-        #NowCount = 0.0
-        for i in range(self.hideDeep):
-            if i == 0:
-                last_layer = self.InputLayer
-            else:
-                last_layer = self.HideLayers[i-1]
-            '''对上一级的数据进行加权计算'''
             for j in range(self.hideNum):
-                NowCount = 0.0
-                '''1. 对上一层的输出加权进行累加，再加上偏置 '''
-                for neural in last_layer:
-                    NowCount += neural.OutPut * neural.Weight[j]
-                #NowCount = NowCount +  self.HideLayers[i][j].Bais
-                '''2. 调用激活函数，得到激活值（即输出值）'''
-                self.HideLayers[i][j].OutPut = sigmoid(NowCount)
-        
-        '''输出层(输出可能是多标签，比如说瓜的品种，和成熟度)'''
-        last_layer = self.HideLayers[-1]
-        OutTable = []
-        for i in range(self.outputNum):
-            NowCount = 0.0
-            '''1. 对上一层的输出加权然后累加，再加上偏置 '''
-            for neural in last_layer:
-                NowCount += neural.OutPut * neural.Weight[i]
-            #NowCount = NowCount +  self.OutputLayer[i].Bais
-            
-            '''2. 调用激活函数，得到激活值(激活值即为输出值)'''
-            self.OutputLayer[i].OutPut = sigmoid(NowCount)
-            OutTable.append(self.OutputLayer[i].OutPut)
-            
-        return OutTable
-    
-    def Back(self,learning_rate,output):
-        '''
-        @summary: 后向传播
-        '''
-        '''计算输出层误差(梯度)Ej = Oj(1 - Oj)(Tj - Oj)    其中Ej表示第j个结点的误差值，Oj表示第j个结点的输出值，Tj样本输出值'''
-        
-        for i in range(self.outputNum):
-            ERROR = self.OutputLayer[i].OutPut * (1 - self.OutputLayer[i].OutPut) * (output - self.OutputLayer[i].OutPut)
-            self.OutputLayer[i].Bais = self.OutputLayer[i].Bais + learning_rate * ERROR
-        '''计算隐藏层误差 Ej = Oj(1 - Oj)* ∑(Ek * Wjk) 其中Wjk表示当前层的结点j到下一层的结点k的权重值,Ek下一层的结点k的误差'''
-        for i in range(self.hideDeep):
-            for j in range(self.hideNum):
-                now_layer = self.HideLayers[i]
-                if i == self.hideDeep - 1:
-                    next_layer = self.OutputLayer
-                else:
-                    next_layer = self.HideLayers[i + 1]
-                ERROR = now_layer[j].OutPut * (1 - now_layer[j].OutPut) * sum([now_layer[j].Weight[k] * next_layer[k].Bais  for k in range(len(next_layer))])
-                '''
-                @更新权重
-                @其中λ表示表示学习速率，取值为0到1，学习速率设置得大，训练收敛更快，但容易陷入局部最优解，学习速率设置得比较小的话，收敛速度较慢，但能一步步逼近全局最优解。
-                ΔWij = λEjOi
-                Wij = Wij + ΔWij
-                @相当于下面使用矩阵的计算
-                '''
-                now_layer[j].Weight = now_layer[j].Weight * learning_rate * ERROR + now_layer[j].Weight
-                '''
-                @更新偏置
-                Δθj = λEj
-                θj = θj + Δθj
-                '''
-                now_layer[j].Bais = now_layer[j].Bais + learning_rate * ERROR
-    
-    def print_network(self):
-        print "-----------------------------------------------------------------------------"
-        for N in self.InputLayer:print N.Weight,
-        for i in range(self.hideDeep):
-            print "\t"
-            for N in self.HideLayers[i]:print N.Weight,
-        for N in self.OutputLayer:print N.Weight,
-        print 
-      
-            
-    def Train(self,TrainingSet,SampleOuts,learning_rate = 0.1,MaxTimes = 10000):
+                nowGradient = self.HideLayer[j].Bais * self.InputLayer[i].Activated
+                self.InputLayer[i].Weight[j] += NowLearn * nowGradient + LastLearn * self.InputLayer[i].Gradient[j]
+                self.InputLayer[i].Gradient[j] = nowGradient
+                
+    def Train(self,TrainingSet,SampleOuts,MaxTimes = 4000):
         '''
         @summary: 训练方法
         '''
-        for i in range(MaxTimes):
+        for _ in range(MaxTimes):
             for index,train in enumerate(TrainingSet):
                 self.Forward(train)
-                if i % 100 == 0:
-                    self.print_network()
                 output = SampleOuts[index]
-                if i % 100 == 0:
-                    self.print_network()
-                self.Back(learning_rate, output)
+                self.NewBack(output)
+                
+    def print_weight(self):
+        '''
+        @summary: 打印权重
+        '''
+        for i in range(self.inputNum):print self.InputLayer[i].Weight,
+        print
+        for i in range(self.hideNum):print self.HideLayer[i].Weight,
+        print
     
-    def run(self,inputs):
+    def run(self,inputs,out):
         '''
         @summary: 执行测试
         '''
-        return self.Forward(inputs)
-
+        print self.Forward(inputs),'---->',out
+        
+    
 if __name__ == "__main__":
-    TrainingSet =  [[0, 0], [0, 1],[1, 0],[1, 1]]
-    SampleOuts = [1,1,1,0]
-    inputNum,hideNum,outputNum,hideDeep = (2,2,1,2)
-    learning_rate = 0.05
-    MaxTimes = 1000
-    AA = NeuralNetWork(inputNum,hideNum,outputNum,hideDeep)
-    AA.Train(TrainingSet, SampleOuts, learning_rate, MaxTimes)
-    print AA.run([0,0])
-    print AA.run([0,1])
-    print AA.run([1,0])
-    print AA.run([1,1])
+    TrainingSet =  [[0,0,0,0], [1,0,0,0],[1,1,0, 0],[0,1,0,0],[0,1,1,1]]
+    SampleOuts = [[1],[1],[1],[1],[0]]
+    inputNum,hideNum,outputNum = (4,4,1)
+    AA = NetWork(inputNum,hideNum,outputNum)
+    AA.Train(TrainingSet, SampleOuts)
+    AA.print_weight()
+    for i in range(len(TrainingSet)):
+        AA.run(TrainingSet[i],SampleOuts[i])
